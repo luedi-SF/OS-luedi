@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "tools/floppy.h"
+#include "floppy.h"
 int main(void) {
     Floppy * img = createFloppy();
 

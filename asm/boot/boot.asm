@@ -1,3 +1,8 @@
+;###################
+;### BOOT
+;### This file is a MBR bootloader.
+;### Located in the first sector of the disk.
+;###################
 [ORG  0x7c00]
 
 [SECTION .data]
@@ -8,7 +13,17 @@ SETUP_PTR equ 0x500
 [BITS 16]
 global _start
 _start:
-
+    ;do initialization
+    mov    ax, 3
+    int    0x10
+    ;clean general registers
+    mov     ax, 0
+    mov     ss, ax
+    mov     ds, ax
+    mov     es, ax
+    mov     fs, ax
+    mov     gs, ax
+    mov     si, ax
 
 ;    mov     ch, 0   ; 0 柱面 (Cylinder)
 ;    mov     dh, 0   ; 0 磁头 (head)
@@ -25,7 +40,7 @@ _start:
     mov si, loading_setup
     call print
 
-    xchg bx, bx ;magic BP
+
 
     call LBA_read
 
@@ -33,7 +48,7 @@ _start:
     mov si, LBA_setup
     call print
 
-    xchg bx, bx ;magic BP
+
 
     jmp SETUP_PTR
 

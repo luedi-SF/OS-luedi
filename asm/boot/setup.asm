@@ -1,63 +1,165 @@
+;###################
+;### SETUP
+;### This file aims to detect hardware, obtain specific contents, enter protected mode, and load the kernel.
+;### Located in the second sector of the disk.
+;### It's a 16-bit.
+;###################
 [ORG  0x500]
+[SECTION .data]
+[BITS 16]
+KERNAL_PTR equ 0x1000
 [SECTION .gdt]
-[BITS 32]
 CODE_SELECTOR equ (1 << 3) ; Index: 0000000000001 Ti: 0 RPL: 00
 DATA_SELECTOR equ (2 << 3) ; Index: 0000000000010 Ti: 0 RPL: 00
 ; dd : 4 bytes
 ; dw : 2 bytes 16 bits
 ; db : 1 byte
 
-
 gdt_base:
     dd 0,0 ; first 8 bytes must be 0.
 gdt_code:
-    dw 0xFFFF   ; Segment limit 0-15
-    dw 0x0000   ; Base address  0-15
-    db
-
+    ;GDT Descriptor Information:
+    ;- BASE (0x00000000): Linear address where the segment begins
+    ;- LIMIT (0xFFFFF): Maximum addressable unit in bytes
+    ;  Actual segment size: 1.00 MB
+    ;- DB (1): Default operation size - 32-bit protected mode
+    ;- DPL (00): Privilege level - Ring 0 (Highest privilege, kernel mode)
+    ;- G (0): Scaling factor - Byte granularity
+    ;- P (1): Presence flag - Segment is present in memory
+    ;- S (1): Descriptor defines a code or data segment
+    ;- TYPE -- 11:(1),10:(0),9:(0),8:(0)
+    ;- TYPE (0001): Access permissions - Code segment: Not accessed, Execute-only, Non-conforming
+    ;- L (0): Not a 64-bit code segment
+    ;- AVL (0): Available for system use (no defined function)
+    ;('0000ffff', '004f9800')
+;    dd 0xffff0000,0x0089f400
+    dd 0x0000ffff, 0x004f9800
+gdt_data:
+    ;GDT Descriptor Information:
+    ;- BASE (0x00000000): Linear address where the segment begins
+    ;- LIMIT (0xFFFFF): Maximum addressable unit in 4KB pages
+    ;  Actual segment size: 4096.00 MB
+    ;- DB (1): Default operation size - 32-bit protected mode
+    ;- DPL (00): Privilege level - Ring 0 (Highest privilege, kernel mode)
+    ;- G (1): Scaling factor - 4KB granularity
+    ;- P (1): Presence flag - Segment is present in memory
+    ;- S (1): Descriptor defines a code or data segment
+    ;- TYPE -- 11:(0),10:(1),9:(0),8:(0)
+    ;- TYPE (0010): Access permissions - Data segment: Not accessed, Read-only, Expand-down (stack-like)
+    ;- L (0): Not a 64-bit code segment
+    ;- AVL (0): Available for system use (no defined function)
+    ;('0000ffff', '00cf9400')
+    dd 0x0000ffff,0x00cf9400
+gdt_ptr:             ; 0x0000 00000000   totaly 6 bytes
+    dw $ - gdt_base  ; the size of gdt 2bytes 0-1
+    dd gdt_base      ; the location of gdt 4bytes 2-5
 
 [SECTION .text]
-[BITS 32]
 global _start
 _start:
-    ; 设置屏幕模式为文本模式，清除屏幕
-    mov eax, 3
-    int 0x10
 
 
-
-
-
-    mov     si, msg_setup
+    ; print info
+    mov     esi, msg_setup_pm
     call    print
 
+;enter protected mode
+protected_mode:
+    ; disable interrupt
+    cli
+;end
 
-    mov     ax, 0
-    mov     ss, ax
-    mov     ds, ax
-    mov     es, ax
-    mov     fs, ax
-    mov     gs, ax
-    mov     si, ax
+    ; open A20
+    in al, 0x92
+    or al, 2
+    out 0x92, al
+;end
 
-while:
+    ;set gdtr(gdt register)
+    lgdt  [gdt_ptr]
+;end
 
-    mov     si, msg1
-    call    print
-    call    sleep
-    call    clear_screen
+    ; set PE=0 in the cr0
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax
+;end
 
-    mov     si, msg2
-    call    print
-    call    sleep
-    call    clear_screen
+    ; read kernel file
+    call read_kernal
 
-    mov     si, msg3
-    call    print
-    call    sleep
-    call    clear_screen
+    xchg bx,bx;bp
+;end
+            ;    ;print
+            ;    mov esi, msg_load_Kernel
+            ;    call  CODE_SELECTOR:print
+            ;
+            ;    xchg bx,bx;bp
+            ;;end
+    ; jump to kernel
+    jmp CODE_SELECTOR:KERNAL_PTR
+;end
 
-    jmp     while
+
+read_kernal:
+
+    ; 0x1F2 : Sector Count : 50
+    mov  dx,  0x1F2
+    mov  al,  50
+    out  dx,  al
+
+    ; Begin : 0x0000001
+    ; 0x1F3 : LBA low : 3
+    inc  dx
+    mov  al,  3
+    out  dx,  al
+
+    ; 0x1F4 : LBA mid : 0
+    inc  dx
+    mov  al,  0
+    out  dx,  al
+
+    ; 0x1F5 : LBA high : 0
+    inc  dx
+    mov  al,  0
+    out  dx,  al
+    ; 0x1F6 : Primary disk
+    inc  dx;     LBA  DRV LBA_high+
+    mov  al,  0b1_1_1_0_0000
+    out  dx,  al
+
+    ; set destination : 0x1000
+    mov  di,  KERNAL_PTR
+    ; 0x1F7 send 0x20 to read command
+    inc  dx;
+    mov  al,  0x20
+    out  dx,  al
+
+    ; clean cx
+    xor  ecx,  ecx
+    ; set loop time : 256
+    mov  ecx,  256
+    ; check status
+    ; waiting BSY=0
+.wait_not_busy:
+    in   al,  dx
+    test al,  0x80
+    jnz  .wait_not_busy
+    ; wait DRQ=1
+.wait_drq:
+    in   al,  dx
+    test al,  0x08
+    jz   .wait_drq
+
+    ; read 0x1F0
+    mov  dx,  0x1F0
+.read_LBA:
+    in   ax,  dx
+    mov [di], ax
+    add  di,  2
+    loop .read_LBA
+
+    ret
 
 ; 如何调用
 ; mov     si, msg   ; 1 传入字符串
@@ -77,31 +179,10 @@ print:
 .done:
     ret
 
-clear_screen:
-    mov ah,    0x06
-    mov al,    0
-    mov cx,    0
-    mov dh,    24
-    mov dl,    79
-    mov bh,    0x07
-    int        0x10
-    ret
 
-
-
-
-sleep:
-    mov ah,86h
-    mov cx,0x8
-    mov dx,0x0
-    int 15h
-    ret
-
-msg_setup:
-    db "Setup", 10, 13, 0
-msg1:
-    db "hello, world.", 10, 13, 0
-msg2:
-    db "hello, world..", 10, 13, 0
-msg3:
-    db "hello, world...", 10, 13, 0
+msg_setup_pm:
+    db "Setup Protected mode", 10, 13, 0
+msg_setup_A20:
+    db "Open A20", 10, 13, 0
+msg_load_Kernel:
+    db "Read Kernel from HD", 10, 13, 0
