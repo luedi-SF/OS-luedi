@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Kernel Debug" type="CLion_Remote" singleton="false" version="1" remoteCommand="127.0.0.1:1234" symbolFile="$PROJECT_DIR$/build/kernel/kernelDBG.bin" sysroot="">
+    <debugger kind="GDB" isBundled="true" />
+    <method v="2" />
+  </configuration>
+</component>

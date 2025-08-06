@@ -17,7 +17,7 @@ When I was writing this part, I found I can only read zero from disk.
 That is because I didn't read the correct sector of my disk.
 It seems like a stupid mistake, but it really will trouble you because it is difficult to figure out the motion of disk at first time.
 
-So there is a way to easily check it out.
+So there is a way to check it out easily .
 
 ```shell
  dd if=${BUILD}/boot/boot.o of=hd.img bs=512 seek=0 count=1 conv=notrunc
