@@ -55,14 +55,11 @@ gdt_ptr:             ; 0x0000 00000000   totaly 6 bytes
     dd gdt_base      ; the location of gdt 4bytes 2-5
 
 [SECTION .text]
-global _start
 _start:
 
-
     ; print info
-    mov     esi, msg_setup_pm
+    mov     si, msg_setup_pm
     call    print
-
 ;enter protected mode
 protected_mode:
     ; disable interrupt
@@ -88,7 +85,6 @@ protected_mode:
     ; read kernel file
     call read_kernal
 
-    xchg bx,bx;bp
 ;end
             ;    ;print
             ;    mov esi, msg_load_Kernel
@@ -103,12 +99,12 @@ protected_mode:
 
 read_kernal:
 
-    ; 0x1F2 : Sector Count : 50
+    ; 0x1F2 : Sector Count : 100
     mov  dx,  0x1F2
-    mov  al,  50
+    mov  al,  100
     out  dx,  al
 
-    ; Begin : 0x0000001
+    ; Begin : 0x0000003 (sector 3)
     ; 0x1F3 : LBA low : 3
     inc  dx
     mov  al,  3
@@ -135,11 +131,10 @@ read_kernal:
     mov  al,  0x20
     out  dx,  al
 
-    ; clean cx
-    xor  ecx,  ecx
-    ; set loop time : 256
-    mov  ecx,  256
-    ; check status
+    ; Read all 100 sectors
+    mov  bx,  100  ; Number of sectors to read
+.read_sector:
+    ; check status (dx should be 0x1F7 - status register)
     ; waiting BSY=0
 .wait_not_busy:
     in   al,  dx
@@ -151,13 +146,19 @@ read_kernal:
     test al,  0x08
     jz   .wait_drq
 
-    ; read 0x1F0
+    ; Read one sector (256 words = 512 bytes)
     mov  dx,  0x1F0
-.read_LBA:
+    mov  ecx,  256
+.read_words:
     in   ax,  dx
     mov [di], ax
     add  di,  2
-    loop .read_LBA
+    loop .read_words
+    
+    ; Move to next sector
+    dec  bx
+    mov  dx,  0x1F7  ; Restore status register for next iteration
+    jnz  .read_sector
 
     ret
 
@@ -182,7 +183,4 @@ print:
 
 msg_setup_pm:
     db "Setup Protected mode", 10, 13, 0
-msg_setup_A20:
-    db "Open A20", 10, 13, 0
-msg_load_Kernel:
-    db "Read Kernel from HD", 10, 13, 0
+

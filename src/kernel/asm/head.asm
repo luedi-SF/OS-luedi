@@ -10,5 +10,3 @@ _start:
     jmp $
 
 
-[SECTION .note.GNU-stack]
-    ; empty section – marks the stack as non-executable
